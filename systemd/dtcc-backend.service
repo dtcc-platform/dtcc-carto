@@ -1,0 +1,15 @@
+[Unit]
+Description=DTCC Cartography Backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/dtcc-carto
+Environment=PORT=8000
+Environment=WORKERS=2
+ExecStart=/opt/dtcc-carto/scripts/start-backend.sh /opt/dtcc-carto
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,68 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REMOTE_PATH: ${{ secrets.EC2_DEPLOY_PATH }}
+  FRONTEND_SERVICE: ${{ secrets.EC2_FRONTEND_SERVICE }}
+  BACKEND_SERVICE: ${{ secrets.EC2_BACKEND_SERVICE }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Add EC2 host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Ensure remote path exists
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p ${REMOTE_PATH}"
+
+      - name: Sync repository to EC2
+        run: |
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='frontend/node_modules' \
+            --exclude='backend/.venv' \
+            --exclude='**/__pycache__' \
+            ./ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${REMOTE_PATH}
+
+      - name: Install dependencies and restart services
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} <<EOF
+            set -euo pipefail
+            cd ${REMOTE_PATH}
+
+            # Back-end dependencies
+            python3.11 -m venv backend/.venv
+            source backend/.venv/bin/activate
+            pip install --upgrade pip
+            pip install -r backend/requirements.txt
+            deactivate
+
+            # Front-end build
+            cd frontend
+            npm ci
+            npm run build
+
+            cd ${REMOTE_PATH}
+            if [ -n "${BACKEND_SERVICE}" ]; then
+              sudo systemctl restart "${BACKEND_SERVICE}"
+            fi
+            if [ -n "${FRONTEND_SERVICE}" ]; then
+              sudo systemctl restart "${FRONTEND_SERVICE}"
+            fi
+          EOF

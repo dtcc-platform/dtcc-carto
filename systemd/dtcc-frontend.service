@@ -1,0 +1,14 @@
+[Unit]
+Description=DTCC Cartography Frontend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/dtcc-carto/frontend
+Environment=PORT=5173
+ExecStart=/opt/dtcc-carto/scripts/start-frontend.sh /opt/dtcc-carto
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
